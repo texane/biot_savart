@@ -83,7 +83,7 @@ static void compute_bfield(bfield_t& f, const wire_t& w)
 
   // dl{u, v} the current vector, stepped by dw
   double dl[2];
-  static const double dw = .1;
+  static const double dw = .01;
   dl[0] = dw * (w.x1 - w.x0) / wlen;
   dl[1] = dw * (w.y1 - w.y0) / wlen;
 
@@ -154,18 +154,13 @@ static void normalize_bfield(bfield_t& f)
 // global stuffs
 
 static bfield_t g_bfield;
-#define CONFIG_WIRE_COUNT 8
+#define CONFIG_WIRE_COUNT 32
 static wire_t g_wires[CONFIG_WIRE_COUNT];
 
 static bool g_has_changed;
 
-static void init_globals(void)
+static void create_wire_loop(void)
 {
-  const double spacew = x_to_space((unsigned int)x_get_width());
-  const double spaceh = x_to_space((unsigned int)x_get_height());
-
-  init_bfield(g_bfield, spacew, spaceh);
-
   const unsigned int wire_count = CONFIG_WIRE_COUNT;
   const double inca = 2 * M_PI / wire_count;
 
@@ -199,9 +194,45 @@ static void init_globals(void)
   // link the first one
   g_wires[0].x0 = g_wires[wire_count - 1].x1;
   g_wires[0].y0 = g_wires[wire_count - 1].y1;
+}
 
+static void create_wire_zigzag(void)
+{
+  int dir = 1;
+
+  const double centy = x_to_space(x_get_height() / 2);
+
+  const double step = (x_to_space(x_get_width()) - 100) / CONFIG_WIRE_COUNT;
+  double x = 50;
+
+  g_wires[0].x0 = x;
+  g_wires[0].y0 = centy;
+
+  for (unsigned int i = 0; i < CONFIG_WIRE_COUNT; ++i, dir *= -1, x += step)
+  {
+    if (i != 0)
+    {
+      g_wires[i].x0 = g_wires[i - 1].x1;
+      g_wires[i].y0 = g_wires[i - 1].y1;
+    }
+
+    g_wires[i].x1 = x;
+    g_wires[i].y1 = centy + 2 * dir;
+
+    g_wires[i].i = 100;
+  }
+}
+
+static void init_globals(void)
+{
+  const double spacew = x_to_space((unsigned int)x_get_width());
+  const double spaceh = x_to_space((unsigned int)x_get_height());
+
+  create_wire_loop();
+
+  init_bfield(g_bfield, spacew, spaceh);
   zero_bfield(g_bfield);
-  for (unsigned int i = 0; i < wire_count; ++i)
+  for (unsigned int i = 0; i < CONFIG_WIRE_COUNT; ++i)
     compute_bfield(g_bfield, g_wires[i]);
   normalize_bfield(g_bfield);
 
