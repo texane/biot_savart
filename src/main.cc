@@ -41,8 +41,17 @@ typedef struct wire
 typedef struct bfield
 {
   double dimx, dimy; // dimension
+  double norm; // for normalisation
   double* p; // data
 } bfield_t;
+
+static void zero_bfield(bfield_t& f)
+{
+  unsigned int xy = (unsigned int)f.dimx * (unsigned int)f.dimy;
+  double* p = f.p;
+  for (; xy; --xy, ++p) *p = 0;
+  f.norm = 0;
+}
 
 static void init_bfield(bfield_t& f, double dimx, double dimy)
 {
@@ -79,7 +88,7 @@ static void compute_bfield(bfield_t& f, const wire_t& w)
   dl[1] = dw * (w.y1 - w.y0) / wlen;
 
   // normalization ratio (ie. max(b))
-  double norm = 0.;
+  double norm = f.norm;
 
   // foreach bfield point
   double* p = f.p;
@@ -122,23 +131,31 @@ static void compute_bfield(bfield_t& f, const wire_t& w)
       }
 
       // assign bfield point
-      *p = mui * sum;
+      *p += mui * sum;
 
       // update norm
       if (*p > norm) norm = *p;
     }
   }
 
+  // update norm value
+  f.norm = norm;
+}
+
+
+static void normalize_bfield(bfield_t& f)
+{
   // normalize
   unsigned int xy = (unsigned int)(f.dimx * f.dimy);
-  for (p = f.p; xy; --xy, ++p) *p /= norm;
+  for (double* p = f.p; xy; --xy, ++p) *p /= f.norm;
 }
 
 
 // global stuffs
 
-bfield_t g_bfield;
-wire_t g_wire;
+static bfield_t g_bfield;
+#define CONFIG_WIRE_COUNT 8
+static wire_t g_wires[CONFIG_WIRE_COUNT];
 
 static bool g_has_changed;
 
@@ -149,20 +166,44 @@ static void init_globals(void)
 
   init_bfield(g_bfield, spacew, spaceh);
 
-#if 0
-  g_wire.x0 = x_to_space(x_get_width() / 2 - 25);
-  g_wire.y0 = x_to_space(x_get_height() / 2) - 10;
-  g_wire.x1 = x_to_space(x_get_width() / 2 + 25);
-  g_wire.y1 = x_to_space(x_get_height() / 2);
-#else
-  g_wire.x0 = x_to_space(0);
-  g_wire.y0 = x_to_space(x_get_height() / 2) - 10;
-  g_wire.x1 = x_to_space(x_get_width());
-  g_wire.y1 = x_to_space(x_get_height() / 2);
-#endif
-  g_wire.i = 10;
+  const unsigned int wire_count = CONFIG_WIRE_COUNT;
+  const double inca = 2 * M_PI / wire_count;
 
-  compute_bfield(g_bfield, g_wire);
+  // loop center
+  const double centerx = x_to_space(x_get_width() / 2);
+  const double centery = x_to_space(x_get_height() / 2);
+
+  // the loop radius
+  static const double r = 20;
+
+  // generate loop segments
+  double a = 0;
+  for (unsigned int i = 0; i < wire_count; ++i, a += inca)
+  {
+    g_wires[i].i = 1;
+
+    // except for the first one
+    if (i != 0)
+    {
+      g_wires[i].x0 = g_wires[i - 1].x1;
+      g_wires[i].y0 = g_wires[i - 1].y1;
+    }
+
+    const double cosa = ::cos(a);
+    const double sina = ::sin(a);
+
+    g_wires[i].x1 = centerx + cosa * r;
+    g_wires[i].y1 = centery + sina * r;
+  }
+
+  // link the first one
+  g_wires[0].x0 = g_wires[wire_count - 1].x1;
+  g_wires[0].y0 = g_wires[wire_count - 1].y1;
+
+  zero_bfield(g_bfield);
+  for (unsigned int i = 0; i < wire_count; ++i)
+    compute_bfield(g_bfield, g_wires[i]);
+  normalize_bfield(g_bfield);
 
   g_has_changed = true;
 }
@@ -234,9 +275,11 @@ static void redraw(void*)
   {
     // redraw always
     // g_has_changed = false;
-
     draw_bfield(g_bfield);
-    draw_wire(g_wire);
+
+    const unsigned int wire_count = CONFIG_WIRE_COUNT;
+    for (unsigned int i = 0; i < wire_count; ++i)
+      draw_wire(g_wires[i]);
   }
 }
 
