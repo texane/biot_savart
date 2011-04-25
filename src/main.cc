@@ -118,13 +118,15 @@ static void compute_bfield(bfield_t& f, const wire_t& w)
 	rhat[0] = (bx - wx) / r;
 	rhat[1] = (by - wy) / r;
 
+	// compute the dot product to get the cosa
 	const double cosa = (dl[0] * rhat[0] + dl[1] * rhat[1]) / (r * dw);
+	const double sina = 1 - cosa;
 
 	// cross_product(dl, rhat)
 	// a x b = |a| x |b| x sin(alpha)
 	// where a and b 2 vectors, alpha the angle between them
 	// since rhat is unit, only used to get the direction right
-	const double cross = dw * r * ::sin(::acos(cosa));
+	const double cross = dw * r * sina;
 
 	// integrate
 	sum += cross / rr;
